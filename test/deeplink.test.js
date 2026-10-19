@@ -5,8 +5,10 @@ const { describe, test } = require("node:test");
 
 const {
   buildDeeplink,
+  buildPermalink,
   determineLinkDate,
   documentRequestUrl,
+  parseDocumentPath,
   parseHostId,
   parseTimeTravel,
   parseViewerPath,
@@ -364,5 +366,101 @@ describe("parseTimeTravel en documentRequestUrl", () => {
   test("gebruikt op de dag van de wissel naar wintertijd de offset van het eind van de dag", () => {
     assert.equal(parseTimeTravel("?datum=2026-10-25").beschikbaarOp, "2026-10-25T23:59:59+01:00");
     assert.equal(parseTimeTravel("?datum=2026-03-29").beschikbaarOp, "2026-03-29T23:59:59+02:00");
+  });
+});
+
+describe("parseDocumentPath", () => {
+  test("ontleedt technisch id en tabblad, ook op tabbladen zonder componentlinks", () => {
+    assert.deepEqual(parseDocumentPath("/documenten/_akn_nl_act_gm1680_2020_omgevingsplan/overzicht"), {
+      documentId: "_akn_nl_act_gm1680_2020_omgevingsplan",
+      tab: "overzicht",
+    });
+  });
+
+  test("accepteert een pad zonder tabblad", () => {
+    assert.deepEqual(parseDocumentPath("/documenten/NL.IMRO.0200.bp1148-vas1"), {
+      documentId: "NL.IMRO.0200.bp1148-vas1",
+      tab: null,
+    });
+  });
+
+  test("geeft null voor de foutpagina en buiten /documenten", () => {
+    assert.equal(parseDocumentPath("/documenten/not-found"), null);
+    assert.equal(parseDocumentPath("/zoeken"), null);
+    assert.equal(parseDocumentPath("/documenten/a/regels/extra"), null);
+  });
+});
+
+describe("buildPermalink", () => {
+  const resolver = "https://resolver.omgevingswet.overheid.nl/viewer/document";
+
+  test("legt bij een vastgestelde regeling de getoonde versie vast met het expressionId", () => {
+    assert.equal(
+      buildPermalink({
+        portalOrigin: PORTAL,
+        pathDocumentId: "_akn_nl_act_gm1680_2020_omgevingsplan",
+        oisDocument: {
+          ...aaEnHunze,
+          omgevingsdocumentMetadata: { expressionId: "/akn/nl/act/gm1680/2020/omgevingsplan/nld@2026-03-18;1" },
+        },
+      }),
+      `${resolver}?expressionId=/akn/nl/act/gm1680/2020/omgevingsplan/nld@2026-03-18;1`,
+    );
+  });
+
+  test("gebruikt in tijdreis het expressionId van de versie die de viewer toont", () => {
+    assert.equal(
+      buildPermalink({
+        portalOrigin: PORTAL,
+        pathDocumentId: "_akn_nl_act_gm1680_2020_omgevingsplan",
+        oisDocument: {
+          ...aaEnHunzeTijdreis,
+          omgevingsdocumentMetadata: { expressionId: "/akn/nl/act/gm1680/2020/omgevingsplan/nld@2025-08-07;2" },
+        },
+      }),
+      `${resolver}?expressionId=/akn/nl/act/gm1680/2020/omgevingsplan/nld@2025-08-07;2`,
+    );
+  });
+
+  test("gebruikt bij een ontwerp of besluitversie het technische id", () => {
+    const ontwerp = "_akn_nl_act_gm1895_2025_omgevingsvisie_akn_nl_bill_gm1895_2025_1_14";
+
+    assert.equal(
+      buildPermalink({
+        portalOrigin: PORTAL,
+        pathDocumentId: ontwerp,
+        oisDocument: { omgevingsdocumentMetadata: { expressionId: "/akn/nl/bill/gm1895/2025/1_14/nld@2025;1" } },
+      }),
+      `${resolver}?documentId=${ontwerp}`,
+    );
+  });
+
+  test("gebruikt bij een IHR-plan het IMRO-id", () => {
+    assert.equal(
+      buildPermalink({ portalOrigin: PORTAL, pathDocumentId: "NL.IMRO.0200.bp1148-vas1", oisDocument: null }),
+      `${resolver}?documentId=NL.IMRO.0200.bp1148-vas1`,
+    );
+  });
+
+  test("valt zonder versiegegevens terug op het technische id", () => {
+    assert.equal(
+      buildPermalink({
+        portalOrigin: PORTAL,
+        pathDocumentId: "_akn_nl_act_gm1680_2020_omgevingsplan",
+        oisDocument: null,
+      }),
+      `${resolver}?documentId=_akn_nl_act_gm1680_2020_omgevingsplan`,
+    );
+  });
+
+  test("gebruikt de resolver die bij het portaal hoort", () => {
+    assert.equal(
+      buildPermalink({
+        portalOrigin: "https://pre.omgevingswet.overheid.nl",
+        pathDocumentId: "NL.IMRO.0200.bp1148-vas1",
+        oisDocument: null,
+      }),
+      "https://resolver.pre.omgevingswet.overheid.nl/viewer/document?documentId=NL.IMRO.0200.bp1148-vas1",
+    );
   });
 });

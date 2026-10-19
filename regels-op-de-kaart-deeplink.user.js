@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Regels op de kaart: deeplink naar document component in document
 // @namespace    tfrijsewijk
-// @version      1.0.0
-// @description  Toont in Regels op de kaart bij de kop van elk document component een knop die een deeplink naar dat document component kopieert.
+// @version      1.1.0
+// @description  Toont in Regels op de kaart bij de kop van elk document component een knop die een deeplink naar dat document component kopieert, en naast de titel een knop voor een permalink naar het document.
 // @match        https://document-viewer.dso.kadaster.nl/*
 // @match        https://*.document-viewer.dso.kadaster.nl/*
 // @grant        GM_setClipboard
@@ -17,16 +17,36 @@
 
 // Het tabblad Bijlagen heeft bij STOP-documenten het pad "bijlage". Het pad "bijlagen" hoort bij IHR.
 const SUPPORTED_TABS = ["regels", "toelichting", "inhoud", "bijlage"];
-const AMSTERDAM = "Europe/Amsterdam";
+// Eén keer aanmaken: het script ontleedt de datum bij elk pointerover-event.
+const AMSTERDAM_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Amsterdam",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const AMSTERDAM_OFFSET = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Amsterdam",
+  timeZoneName: "longOffset",
+});
 
-function parseViewerPath(pathname) {
-  const match = /^\/documenten\/([^/]+)\/([^/]+)\/?$/.exec(pathname);
+function parseDocumentPath(pathname) {
+  const match = /^\/documenten\/([^/]+)(?:\/([^/]+))?\/?$/.exec(pathname);
 
-  if (!match || !SUPPORTED_TABS.includes(match[2])) {
+  if (!match || match[1] === "not-found") {
     return null;
   }
 
-  return { documentId: match[1], tab: match[2] };
+  return { documentId: match[1], tab: match[2] ?? null };
+}
+
+function parseViewerPath(pathname) {
+  const path = parseDocumentPath(pathname);
+
+  if (!path || !SUPPORTED_TABS.includes(path.tab)) {
+    return null;
+  }
+
+  return path;
 }
 
 function parseHostId(hostId) {
@@ -50,12 +70,7 @@ function isDraftId(documentId) {
 }
 
 function amsterdamDate(instant) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: AMSTERDAM,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
+  const parts = AMSTERDAM_DATE.formatToParts(instant);
   const part = (type) => parts.find((p) => p.type === type).value;
 
   return `${part("year")}-${part("month")}-${part("day")}`;
@@ -63,10 +78,7 @@ function amsterdamDate(instant) {
 
 function amsterdamOffset(date) {
   // Om 21:00 UTC is de wissel van zomer- en wintertijd (01:00 UTC) al geweest. Dit is dus de offset aan het eind van de dag.
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: AMSTERDAM,
-    timeZoneName: "longOffset",
-  }).formatToParts(new Date(`${date}T21:00:00Z`));
+  const parts = AMSTERDAM_OFFSET.formatToParts(new Date(`${date}T21:00:00Z`));
   const name = parts.find((p) => p.type === "timeZoneName").value;
 
   return name === "GMT" ? "+00:00" : name.slice(3);
@@ -155,11 +167,29 @@ function buildDeeplink({ portalOrigin, pathDocumentId, tab, date, componentDocum
   return `${portalOrigin}/regels-op-de-kaart/documenten/${pathDocumentId}/${tab}${query}#${componentDocumentId},${eId}`;
 }
 
+function buildPermalink({ portalOrigin, pathDocumentId, oisDocument }) {
+  // Elk portaal heeft een eigen resolver: resolver.omgevingswet.overheid.nl, resolver.pre.omgevingswet.overheid.nl.
+  const portal = new URL(portalOrigin);
+  const resolver = `${portal.protocol}//resolver.${portal.host}/viewer/document`;
+
+  // Een expressionId legt de getoonde versie vast, net als de datum in een deeplink. Een ontwerp, besluitversie of
+  // IHR-plan heeft al een eigen technisch id per versie. De resolver herkent een ontwerp alleen aan dat technische id.
+  const expressionId =
+    pathDocumentId.startsWith("_akn_") && !isDraftId(pathDocumentId)
+      ? oisDocument?.omgevingsdocumentMetadata?.expressionId
+      : null;
+
+  // Zonder encoding, zoals in de documentatie van de resolver: de resolver accepteert het en de link blijft leesbaar.
+  return expressionId ? `${resolver}?expressionId=${expressionId}` : `${resolver}?documentId=${pathDocumentId}`;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     buildDeeplink,
+    buildPermalink,
     determineLinkDate,
     documentRequestUrl,
+    parseDocumentPath,
     parseHostId,
     parseTimeTravel,
     parseViewerPath,
@@ -174,21 +204,29 @@ const INNER_CLASS = "userscript-deeplink-inner";
 const STATUS_CLASS = "userscript-deeplink-status";
 const STYLE_CLASS = "userscript-deeplink-style";
 const HEADING_SELECTOR = ".heading-container > .heading > :is(h2, h3, h4, h5, h6, [role='heading'])";
-const IDLE_STATE = { icon: "copy-outline", label: "Kopieer link naar dit onderdeel" };
-const COPIED_STATE = { icon: "check", label: "Link gekopieerd" };
+const TITLE_CONTAINER = "dsov-document-header .dso-document-header.title";
+const COMPONENT_STATES = {
+  idle: { icon: "copy-outline", label: "Kopieer link naar dit onderdeel" },
+  copied: { icon: "check", label: "Link gekopieerd" },
+};
+const DOCUMENT_STATES = {
+  idle: { icon: "internet", label: "Kopieer permalink naar dit document" },
+  copied: { icon: "check", label: "Permalink gekopieerd" },
+};
 const COPIED_DURATION = 2000;
 const FADE_DURATION = 200;
 
-const VISIBLE = `.heading-container:is(:hover, :focus-within) .${WRAPPER_CLASS}`;
-
 // Verborgen neemt de knop geen ruimte in. Anders verspringt de kop bij elke injectie, en die gebeurt al bij hover over
 // de inhoud van een component. Een kolom van 0fr of 1fr geeft breedte 0 of die van de knop, zonder vaste maat.
-const STYLE = `
+function wrapperStyle(container) {
+  const visible = `${container}:is(:hover, :focus-within) .${WRAPPER_CLASS}`;
+
+  return `
 .${WRAPPER_CLASS} {
   display: grid;
   grid-template-columns: 0fr;
   flex-shrink: 0;
-  /* Heft de gap van 8px in .heading op zolang de knop verborgen is. */
+  /* Heft de gap van 8px voor de knop op zolang de knop verborgen is. */
   margin-inline-start: -8px;
   opacity: 0;
   pointer-events: none;
@@ -206,11 +244,13 @@ const STYLE = `
 }
 
 .${WRAPPER_CLASS} dso-icon-button {
-  /* Dezelfde private custom property die het document component zelf voor zijn knoppen gebruikt. */
+  /* Dezelfde private custom properties die het document component zelf voor zijn knoppen gebruikt. De header van de
+     titel heeft een grijze achtergrond en zet de hover-kleur daarom op grijs. */
   --_dso-icon-button-tertiary-color: #275937;
+  --_dso-icon-button-tertiary-hover-color: #275937;
 }
 
-${VISIBLE} {
+${visible} {
   grid-template-columns: 1fr;
   margin-inline-start: 0;
   opacity: 1;
@@ -220,7 +260,7 @@ ${VISIBLE} {
 
 /* Een knop die bij hover wordt geïnjecteerd, vaagt ook de eerste keer in. */
 @starting-style {
-  ${VISIBLE} {
+  ${visible} {
     opacity: 0;
   }
 }
@@ -234,11 +274,33 @@ ${VISIBLE} {
   white-space: nowrap;
 }
 `;
+}
+
+const COMPONENT_STYLE = wrapperStyle(".heading-container");
+
+const DOCUMENT_STYLE = `
+/* Naast de titel in plaats van eronder. */
+${TITLE_CONTAINER}:has(> .${WRAPPER_CLASS}) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+${TITLE_CONTAINER}:has(> .${WRAPPER_CLASS}) > h1 {
+  min-inline-size: 0;
+}
+
+/* In de sticky header vult de titel de breedte, zodat het pijltje naar boven rechts blijft staan. */
+${TITLE_CONTAINER}.dso-document-header-sticky:has(> .${WRAPPER_CLASS}) > h1 {
+  flex-grow: 1;
+}
+${wrapperStyle(TITLE_CONTAINER)}`;
 
 const oisDocuments = new Map();
 const hostsWithListeners = new WeakSet();
 const resetTimers = new WeakMap();
 let portalOrigin = null;
+let documentWrapper = null;
 
 function findPortalOrigin() {
   const ancestors = location.ancestorOrigins;
@@ -260,7 +322,7 @@ function findPortalOrigin() {
 }
 
 function currentPage() {
-  const path = parseViewerPath(location.pathname);
+  const path = parseDocumentPath(location.pathname);
 
   if (!path) {
     return null;
@@ -270,7 +332,8 @@ function currentPage() {
 }
 
 function loadOisDocument(page) {
-  if (isDraftId(page.documentId)) {
+  // Alleen van een vastgestelde STOP-regeling hebben de links de versiegegevens nodig.
+  if (!page.documentId.startsWith("_akn_") || isDraftId(page.documentId)) {
     return Promise.resolve(null);
   }
 
@@ -308,25 +371,25 @@ function setButtonState(button, state) {
   button.setAttribute("label", state.label);
 }
 
-function showCopied(button, status) {
+function showCopied(button, status, states) {
   clearTimeout(resetTimers.get(button));
-  setButtonState(button, COPIED_STATE);
-  status.textContent = COPIED_STATE.label;
+  setButtonState(button, states.copied);
+  status.textContent = states.copied.label;
   resetTimers.set(
     button,
     setTimeout(() => {
-      setButtonState(button, IDLE_STATE);
+      setButtonState(button, states.idle);
       status.textContent = "";
     }, COPIED_DURATION),
   );
 }
 
-async function copyDeeplink(host, button, status) {
+async function componentLink(host) {
   const page = currentPage();
   const target = parseHostId(host.id);
 
-  if (!page || !target) {
-    return;
+  if (!page || !SUPPORTED_TABS.includes(page.tab) || !target) {
+    return null;
   }
 
   const oisDocument = await loadOisDocument(page);
@@ -337,7 +400,8 @@ async function copyDeeplink(host, button, status) {
     timeTravel: page.timeTravel,
     now: Date.now(),
   });
-  const link = buildDeeplink({
+
+  return buildDeeplink({
     portalOrigin,
     pathDocumentId: page.documentId,
     tab: page.tab,
@@ -345,20 +409,40 @@ async function copyDeeplink(host, button, status) {
     componentDocumentId: target.documentId,
     eId: target.eId,
   });
-
-  GM_setClipboard(link);
-  showCopied(button, status);
 }
 
-function createStyle() {
+async function documentLink() {
+  const page = currentPage();
+
+  if (!page) {
+    return null;
+  }
+
+  const oisDocument = await loadOisDocument(page);
+
+  return buildPermalink({ portalOrigin, pathDocumentId: page.documentId, oisDocument });
+}
+
+async function copyLink(getLink, button, status, states) {
+  const link = await getLink();
+
+  if (!link) {
+    return;
+  }
+
+  GM_setClipboard(link);
+  showCopied(button, status, states);
+}
+
+function createStyle(css) {
   const style = document.createElement("style");
   style.className = STYLE_CLASS;
-  style.textContent = STYLE;
+  style.textContent = css;
 
   return style;
 }
 
-function createWrapper(host) {
+function createWrapper(states, getLink) {
   const wrapper = document.createElement("span");
   wrapper.className = WRAPPER_CLASS;
 
@@ -367,7 +451,7 @@ function createWrapper(host) {
 
   const button = document.createElement("dso-icon-button");
   button.setAttribute("variant", "tertiary");
-  setButtonState(button, IDLE_STATE);
+  setButtonState(button, states.idle);
 
   // Een gewijzigd aria-label lezen niet alle schermlezers voor. Een live region die er al vóór de klik staat wel.
   const status = document.createElement("span");
@@ -378,7 +462,7 @@ function createWrapper(host) {
     // De klik hoort alleen bij deze knop. Het component en de viewer mogen er niet op reageren, bijvoorbeeld door in of
     // uit te klappen.
     event.stopPropagation();
-    copyDeeplink(host, button, status);
+    copyLink(getLink, button, status, states);
   });
 
   inner.append(button);
@@ -422,7 +506,7 @@ function inject(host, page) {
 
   // Stencil kan bij een herrender onze nodes weghalen of verplaatsen. Daarom elke keer in de shadow root kijken.
   if (!root.querySelector(`.${STYLE_CLASS}`)) {
-    root.append(createStyle());
+    root.append(createStyle(COMPONENT_STYLE));
   }
 
   // Achter de knop voor onderliggende artikelen en de badge, maar vóór de addons. Die staan rechts uitgelijnd.
@@ -431,7 +515,10 @@ function inject(host, page) {
   const wrapper = root.querySelector(`.${WRAPPER_CLASS}`);
 
   if (!wrapper) {
-    row.insertBefore(createWrapper(host), addons);
+    row.insertBefore(
+      createWrapper(COMPONENT_STATES, () => componentLink(host)),
+      addons,
+    );
   } else if (wrapper.parentElement !== row || wrapper.nextElementSibling !== addons) {
     row.insertBefore(wrapper, addons);
   }
@@ -443,10 +530,38 @@ function inject(host, page) {
   }
 }
 
+function ensureDocumentButton(page) {
+  loadOisDocument(page);
+
+  // Er is maar één titel. Die knop mag blijven staan, ook zonder hover of focus.
+  if (documentWrapper?.isConnected) {
+    return;
+  }
+
+  const container = document.querySelector(TITLE_CONTAINER);
+
+  if (!container?.querySelector(":scope > h1")) {
+    return;
+  }
+
+  if (!document.head.querySelector(`.${STYLE_CLASS}`)) {
+    document.head.append(createStyle(DOCUMENT_STYLE));
+  }
+
+  documentWrapper = createWrapper(DOCUMENT_STATES, documentLink);
+  container.append(documentWrapper);
+}
+
 function handleActivity(event) {
   const page = currentPage();
 
   if (!page) {
+    return;
+  }
+
+  ensureDocumentButton(page);
+
+  if (!SUPPORTED_TABS.includes(page.tab)) {
     return;
   }
 
@@ -465,7 +580,7 @@ function start() {
   }
 
   // Geen MutationObserver: er staan veel document componenten op een pagina. Alleen de keten onder de muis of focus
-  // krijgt een knop.
+  // krijgt een knop. De titel krijgt zijn knop bij het eerste event op een documentpagina.
   document.addEventListener("pointerover", handleActivity, true);
   document.addEventListener("focusin", handleActivity, true);
 }
