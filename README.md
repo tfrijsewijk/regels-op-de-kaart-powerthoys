@@ -20,6 +20,18 @@ https://resolver.omgevingswet.overheid.nl/viewer/document?expressionId=/akn/nl/a
 
 Bij een vastgestelde regeling legt het expressionId de getoonde versie vast, ook in tijdreis. Is die versie later vervallen, dan opent de resolver het document in tijdreis op die versie. Bij een ontwerp, een besluitversie of een IHR-plan bevat de permalink het technische id (`documentId`). De resolver opent het document zonder tabblad, dus de viewer kiest zelf het tabblad.
 
+## Verwerkte XML
+
+Naast de knop voor de link staat een knop met een plusteken in een vierkant. Die toont direct onder de kop de verwerkte XML van het document component: de XML die de viewer van Ozon krijgt en aan het component geeft. Onder elkaar staan Gereserveerd, Vervallen, Kop en Inhoud, voor zover het component ze heeft, met een lege regel ertussen. Het paneel staat boven de kenmerken en de inhoud van het component en springt net zo ver in als de kenmerken.
+
+Staat de XML open, dan is het plusteken gevuld en blijven de knoppen staan, ook zonder hover. Dezelfde knop sluit het paneel weer. Het paneel staat los van in- en uitklappen: het blijft staan en toont ook de Inhoud van een ingeklapt onderdeel.
+
+Het paneel toont eerst de originele XML: teken voor teken zoals het component hem kreeg, alleen met kleuren erbij. Vaak staat die XML op één lange regel. Op het scherm breekt die af, in de gekopieerde tekst niet.
+
+Rechtsboven in het paneel staan twee knoppen. De knop met de boomstructuur wisselt tussen de originele XML en een opgemaakte versie. De andere knop kopieert de XML naar het klembord, precies zoals het paneel hem op dat moment toont.
+
+De opmaak verandert alleen witruimte tussen elementen. Elk element zonder tekst krijgt een eigen regel met inspringing. Een element met tekst blijft op één regel, precies zoals het was, want daar telt elke spatie. Dat lijkt op Prettier met `xmlWhitespaceSensitivity: "preserve"`, met twee verschillen: lege elementen houden de vorm van de bron (`<Al/>` waar Prettier `<Al />` schrijft), en binnen een element met tekst maakt Prettier soms toch nieuwe regels.
+
 ## Installeren
 
 1. Installeer de extensie Tampermonkey of Violentmonkey in je browser.
@@ -45,12 +57,18 @@ Een nieuwe versie uitbrengen gaat zo: verhoog `@version` in de kop van het scrip
 - Na een klik met de muis houdt de knop de focus. Hij blijft dan zichtbaar tot je ergens anders klikt of verder tabt.
 - Een link met datum toont in de viewer de tijdreisbalk, ook als de versie nog actueel is.
 - Een link naar een lid springt naar het artikel. Dat doet de viewer zelf.
+- De knop voor de XML verschijnt alleen als de script-manager het script in de pagina zelf draait, want alleen daar zijn de properties van het component te lezen. Dat is de standaard van Tampermonkey en Violentmonkey, en het script vraagt erom met `@sandbox raw` en `@inject-into auto`. Blokkeert de viewer dat ooit met een strengere CSP, dan blijft de XML-knop weg en werken de linkknoppen nog.
+- Het paneel toont alleen de XML van het component zelf, niet die van de onderdelen eronder. Bij een hoofdstuk zie je dus alleen de Kop.
+- Bij een aanhef en een sluiting toont het paneel geen Kop. Die kop maakt de viewer zelf, hij komt niet van Ozon.
+- Gereserveerd en Vervallen komen soms van de viewer zelf, als leeg element. Dat gebeurt bijvoorbeeld als Ozon alleen aangeeft dat een onderdeel gereserveerd is.
+- Het XML-paneel krijgt nieuwe XML als je met de muis over het onderdeel gaat of de focus erin zet. Zet de viewer nieuwe XML op een onderdeel terwijl je daar niet bent, dan toont het paneel even de oude.
+- Klap je een bovenliggend onderdeel in, dan haalt de viewer de onderdelen eronder weg, met hun open XML-panelen.
 - De viewer scrolt het document component net onder zijn vaste tabbalk. Je ziet de kop dan soms niet meteen.
 - Plak je de link in een tabblad dat al hetzelfde document en tabblad toont, dan verandert alleen het fragment. Het portaal geeft dat niet door aan de viewer en er gebeurt niets. Herlaad dan de pagina, of open de link in een nieuw tabblad.
 
 ## Testen
 
-De functies die de link bouwen, werken zonder DOM en hebben tests. Draai ze met Node 20 of nieuwer:
+De functies die de link bouwen en de XML opmaken en kleuren, werken zonder DOM en hebben tests. Draai ze met Node 20 of nieuwer:
 
 ```
 node --test
