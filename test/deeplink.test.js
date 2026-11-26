@@ -13,7 +13,7 @@ const {
   parseTimeTravel,
   parseViewerPath,
   versionStartDate,
-} = require("../regels-op-de-kaart-deeplink.user.js");
+} = require("../regels-op-de-kaart-powerthoys.user.js");
 
 const PORTAL = "https://omgevingswet.overheid.nl";
 const VIEWER = "https://document-viewer.dso.kadaster.nl";

@@ -1,4 +1,4 @@
-# Regels op de kaart: deeplink naar document component in document
+# Regels op de kaart PowerThoys
 
 Een userscript voor Violentmonkey of Tampermonkey. In Regels op de kaart toont het bij de kop van elk document component een knop. Een klik kopieert een link naar dat document component naar het klembord. Wie de link opent, komt in de viewer uit met dat document component opengeklapt en in beeld.
 
@@ -35,7 +35,7 @@ De opmaak verandert alleen witruimte tussen elementen. Elk element zonder tekst 
 ## Installeren
 
 1. Installeer de extensie Tampermonkey of Violentmonkey in je browser.
-2. Open de [installatielink](https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-deeplink/main/regels-op-de-kaart-deeplink.user.js). De extensie herkent het bestand als userscript en vraagt of je het wilt installeren.
+2. Open de [installatielink](https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-powerthoys/main/regels-op-de-kaart-powerthoys.user.js). De extensie herkent het bestand als userscript en vraagt of je het wilt installeren.
 3. Open een document in Regels op de kaart, bijvoorbeeld het tabblad Regels van een omgevingsplan. Stond de pagina al open, herlaad hem dan.
 
 In Chrome moet je bij zo'n extensie mogelijk "Gebruikersscripts toestaan" aanzetten in de details van de extensie, of de ontwikkelaarsmodus op de pagina met extensies. Dat is niet nagegaan.
@@ -45,6 +45,8 @@ In Chrome moet je bij zo'n extensie mogelijk "Gebruikersscripts toestaan" aanzet
 De extensie kijkt zelf af en toe of er een nieuwe versie op `main` staat. Wil je niet wachten, zoek dan in het menu van de extensie naar updates.
 
 Een nieuwe versie uitbrengen gaat zo: verhoog `@version` in de kop van het script en push naar `main`. Zonder hogere versie ziet de extensie geen update. GitHub houdt het ruwe bestand een paar minuten in de cache.
+
+Tot en met versie 1.2.0 heette het script "Regels op de kaart: deeplink naar document component in document", in de repo `regels-op-de-kaart-deeplink`. Een installatie van toen zoekt updates op het oude adres. Daarom staat `regels-op-de-kaart-deeplink.user.js` er nog, als kopie van versie 1.3.0. Via die kopie schuift zo'n installatie door naar het nieuwe adres. De kopie krijgt geen nieuwe versies en verdwijnt later.
 
 ## Bekende grenzen
 

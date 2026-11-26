@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Regels op de kaart: deeplink naar document component in document
+// @name         Regels op de kaart PowerThoys
 // @namespace    tfrijsewijk
-// @version      1.2.0
+// @version      1.3.0
 // @description  Toont in Regels op de kaart bij de kop van elk document component een knop die een deeplink naar dat document component kopieert en een knop die de verwerkte XML toont, en naast de titel een knop voor een permalink naar het document.
 // @match        https://document-viewer.dso.kadaster.nl/*
 // @match        https://*.document-viewer.dso.kadaster.nl/*
@@ -9,8 +9,8 @@
 // @sandbox      raw
 // @inject-into  auto
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-deeplink/main/regels-op-de-kaart-deeplink.user.js
-// @downloadURL  https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-deeplink/main/regels-op-de-kaart-deeplink.user.js
+// @updateURL    https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-powerthoys/main/regels-op-de-kaart-powerthoys.user.js
+// @downloadURL  https://raw.githubusercontent.com/tfrijsewijk/regels-op-de-kaart-powerthoys/main/regels-op-de-kaart-powerthoys.user.js
 // ==/UserScript==
 
 "use strict";
@@ -399,11 +399,11 @@ if (typeof module !== "undefined" && module.exports) {
 
 // DOM
 
-const WRAPPER_CLASS = "userscript-deeplink";
-const INNER_CLASS = "userscript-deeplink-inner";
-const STATUS_CLASS = "userscript-deeplink-status";
-const STYLE_CLASS = "userscript-deeplink-style";
-const PINNED_CLASS = "userscript-deeplink-pinned";
+const WRAPPER_CLASS = "userscript-powerthoys";
+const INNER_CLASS = "userscript-powerthoys-inner";
+const STATUS_CLASS = "userscript-powerthoys-status";
+const STYLE_CLASS = "userscript-powerthoys-style";
+const PINNED_CLASS = "userscript-powerthoys-pinned";
 const XML_TOGGLE_CLASS = "userscript-xml-toggle";
 const XML_PANEL_CLASS = "userscript-xml";
 const XML_BOX_CLASS = "userscript-xml-box";
@@ -656,7 +656,7 @@ function loadOisDocument(page) {
       .catch((error) => {
         // Bij de volgende injectie opnieuw proberen, in plaats van de fout te onthouden.
         oisDocuments.delete(key);
-        console.warn("[deeplink] Versiegegevens niet opgehaald:", error);
+        console.warn("[powerthoys] Versiegegevens niet opgehaald:", error);
 
         return null;
       });
@@ -823,7 +823,7 @@ async function formatFragment(xml) {
   try {
     return (await xmlFormatter(xml)).replace(/\n+$/, "");
   } catch (error) {
-    console.warn("[deeplink] XML niet opgemaakt:", error);
+    console.warn("[powerthoys] XML niet opgemaakt:", error);
 
     return xml;
   }

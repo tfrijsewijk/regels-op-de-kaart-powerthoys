@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const { describe, test } = require("node:test");
 
-const { formatXml, highlightXml } = require("../regels-op-de-kaart-deeplink.user.js");
+const { formatXml, highlightXml } = require("../regels-op-de-kaart-powerthoys.user.js");
 
 function stripSpans(html) {
   return html
