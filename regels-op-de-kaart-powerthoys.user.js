@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Regels op de kaart PowerThoys
 // @namespace    tfrijsewijk
-// @version      1.3.0
-// @description  Toont in Regels op de kaart bij de kop van elk document component een knop die een deeplink naar dat document component kopieert en een knop die de verwerkte XML toont, en naast de titel een knop voor een permalink naar het document.
+// @version      1.4.0
+// @description  Toont in Regels op de kaart bij de kop van elk document component een knop die een deeplink naar dat document component kopieert en een knop die de verwerkte XML toont, naast de titel een knop voor een permalink naar het document, en bij een ontwerp of besluitversie een filter op wijzigingen.
 // @match        https://document-viewer.dso.kadaster.nl/*
 // @match        https://*.document-viewer.dso.kadaster.nl/*
 // @grant        GM_setClipboard
@@ -69,6 +69,12 @@ function parseHostId(hostId) {
 
 function isDraftId(documentId) {
   return documentId.includes("_akn_nl_bill_");
+}
+
+// Alleen een ontwerp en een besluitversie tonen wat er verandert, en alleen de tabbladen met document componenten
+// hebben iets om te filteren.
+function showsChangeFilter(page) {
+  return !!page && isDraftId(page.documentId) && SUPPORTED_TABS.includes(page.tab);
 }
 
 function amsterdamDate(instant) {
@@ -393,6 +399,7 @@ if (typeof module !== "undefined" && module.exports) {
     parseHostId,
     parseTimeTravel,
     parseViewerPath,
+    showsChangeFilter,
     versionStartDate,
   };
 }
@@ -408,8 +415,17 @@ const XML_TOGGLE_CLASS = "userscript-xml-toggle";
 const XML_PANEL_CLASS = "userscript-xml";
 const XML_BOX_CLASS = "userscript-xml-box";
 const XML_ACTIONS_CLASS = "userscript-xml-actions";
+const FILTER_ROW_CLASS = "userscript-powerthoys-filters";
+const FILTER_CHECKBOX_CLASS = "userscript-powerthoys-filter-wijzigingen";
+const FILTER_ACTIVE_CLASS = "userscript-powerthoys-alleen-wijzigingen";
+const FILTER_STYLE_CLASS = "userscript-powerthoys-filter-style";
 const HEADING_SELECTOR = ".heading-container > .heading > :is(h2, h3, h4, h5, h6, [role='heading'])";
 const TITLE_CONTAINER = "dsov-document-header .dso-document-header.title";
+const STICKY_NAV = ".document-page .sticky-nav";
+const VIEWER_FILTER_FIELDS = "dsov-document-structuur-filters .dso-field-container";
+// Het label "Gewijzigd" of "Ontwerp" staat op een onderdeel dat zelf verandert, de badge "!" op een onderdeel met een
+// wijziging eronder. De inhoudsopgave gebruikt hetzelfde component, maar niet binnen dsov-document-body-element-ozon.
+const CHANGED_COMPONENT = "dsov-document-body-element-ozon > dso-document-component:is([label], [badge])";
 const COMPONENT_STATES = {
   idle: { icon: "copy-outline", label: "Kopieer link naar dit onderdeel" },
   copied: { icon: "check", label: "Link gekopieerd" },
@@ -595,6 +611,101 @@ ${TITLE_CONTAINER}.dso-document-header-sticky:has(> .${WRAPPER_CLASS}) > h1 {
 }
 ${wrapperStyle(TITLE_CONTAINER)}`;
 
+// De eigen rij is een kopie van de rij "Filter op:" van de viewer: dezelfde HTML en dezelfde classes van de toolkit. De
+// viewer zet de rest van de opmaak in de CSS van zijn component, aan _ngcontent-attributen met een naam die per build
+// verschilt. Die regels staan hier daarom nog een keer, zonder die attributen.
+const FILTER_STYLE = `
+.${FILTER_ROW_CLASS} {
+  display: block;
+}
+
+.${FILTER_ROW_CLASS} .dsov-document-structuur-filters {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #fff;
+  padding: 0.5rem;
+  z-index: 1;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.${FILTER_ROW_CLASS} .dso-document-filter-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin: 4px 0;
+}
+
+.${FILTER_ROW_CLASS} .document-structuur-filter-container {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.${FILTER_ROW_CLASS} .form-group {
+  display: flex;
+  align-items: center;
+}
+
+.${FILTER_ROW_CLASS} .form-group.dso-select {
+  margin: 0;
+}
+
+.${FILTER_ROW_CLASS} .dso-select {
+  display: flex;
+  margin-left: auto !important;
+}
+
+/* Alleen het label "Filter op:". Bij de viewer mist het label binnen dso-selectable het _ngcontent-attribuut, en
+   houdt het daardoor zijn eigen marge. */
+.${FILTER_ROW_CLASS} .form-group > .dso-label-container > label {
+  margin: 0 8px 0 0;
+}
+
+.${FILTER_ROW_CLASS} .dso-select > .dso-field-container {
+  display: flex;
+  margin: 0;
+}
+
+.${FILTER_ROW_CLASS} .dso-select > .dso-field-container > dso-selectable {
+  margin-bottom: 0;
+}
+
+.${FILTER_ROW_CLASS} .dso-select > .dso-field-container > dso-selectable:last-child {
+  margin-left: 8px;
+}
+
+/* De viewer zet hiervoor de class document-panel--small, vanuit dezelfde stand als dit attribuut. */
+dso-viewer-grid[document-panel-size="small"] .${FILTER_ROW_CLASS} .form-group > .dso-label-container > label {
+  margin-right: 1rem;
+}
+
+dso-viewer-grid[document-panel-size="small"] .${FILTER_ROW_CLASS} .dso-field-container {
+  flex-grow: 1;
+}
+
+dso-viewer-grid[document-panel-size="small"] .${FILTER_ROW_CLASS} .document-structuur-filter-container > div {
+  margin-top: 0.5rem;
+}
+
+/* Zoals de viewer zijn eigen rij verbergt zolang het zoekveld open staat. */
+.sticky-nav:has(.dso-navbar-extension-expand-button[aria-expanded="true"]) > .${FILTER_ROW_CLASS} {
+  display: none;
+}
+
+/* In de rij van de viewer krijgt alleen het laatste vinkje marge, zoals Kenmerken naast Locatie. */
+${VIEWER_FILTER_FIELDS} > .${FILTER_CHECKBOX_CLASS} {
+  margin-bottom: 0;
+  margin-left: 8px;
+}
+
+/* Een ingeklapt onderdeel heeft de onderdelen eronder nog niet getekend. Zijn badge laat zien dat er iets onder
+   verandert, dus het blijft staan. */
+body.${FILTER_ACTIVE_CLASS} li:has(> dsov-document-body-element-ozon > dso-document-component:not([label]):not([badge])) {
+  display: none;
+}
+`;
+
 const oisDocuments = new Map();
 const hostsWithListeners = new WeakSet();
 const resetTimers = new WeakMap();
@@ -603,6 +714,9 @@ const resetTimers = new WeakMap();
 const xmlPanels = new WeakMap();
 let portalOrigin = null;
 let documentWrapper = null;
+let changeFilterOn = false;
+let changeFilterDocumentId = null;
+let pageControlsScheduled = false;
 
 function findPortalOrigin() {
   const ancestors = location.ancestorOrigins;
@@ -736,9 +850,9 @@ async function copyText(getText, button, status, states) {
   showCopied(button, status, states);
 }
 
-function createStyle(css) {
+function createStyle(css, className = STYLE_CLASS) {
   const style = document.createElement("style");
-  style.className = STYLE_CLASS;
+  style.className = className;
   style.textContent = css;
 
   return style;
@@ -1042,7 +1156,159 @@ function ensureDocumentButton(page) {
   container.append(documentWrapper);
 }
 
-function handleActivity(event) {
+function scrollContainer() {
+  return document.querySelector("dso-viewer-grid")?.shadowRoot?.querySelector(".dso-document-panel .content") ?? null;
+}
+
+function findScrollAnchor() {
+  // Een gewijzigd onderdeel staat er met en zonder filter, en alles erboven ook. Het eerste onder de vaste balk is dus
+  // in beide standen te vinden.
+  const top = document.querySelector(STICKY_NAV)?.getBoundingClientRect().bottom ?? 0;
+
+  for (const component of document.querySelectorAll(CHANGED_COMPONENT)) {
+    const rect = component.getBoundingClientRect();
+
+    if (rect.height > 0 && rect.top >= top) {
+      return component;
+    }
+  }
+
+  return null;
+}
+
+function applyChangeFilter(on) {
+  changeFilterOn = on;
+  document.body.classList.toggle(FILTER_ACTIVE_CLASS, on);
+  document.querySelectorAll(`.${FILTER_CHECKBOX_CLASS}`).forEach((checkbox) => checkbox.toggleAttribute("checked", on));
+}
+
+function setChangeFilter(on) {
+  // Bij verbergen houdt Chrome de plek zelf vast, bij weer tonen niet: dan kiest de browser een ander anker en schuift
+  // de tekst honderden pixels weg. Het script zet het onderdeel bovenaan daarom zelf terug op dezelfde hoogte.
+  const container = scrollContainer();
+  const anchor = container && findScrollAnchor();
+  const before = anchor?.getBoundingClientRect().top;
+
+  applyChangeFilter(on);
+
+  if (anchor) {
+    container.scrollTop += anchor.getBoundingClientRect().top - before;
+  }
+}
+
+function createFilterCheckbox() {
+  const checkbox = document.createElement("dso-selectable");
+  checkbox.className = FILTER_CHECKBOX_CLASS;
+  checkbox.setAttribute("type", "checkbox");
+  checkbox.setAttribute("identifier", FILTER_CHECKBOX_CLASS);
+  checkbox.setAttribute("name", FILTER_CHECKBOX_CLASS);
+  checkbox.toggleAttribute("checked", changeFilterOn);
+  checkbox.textContent = "Wijzigingen";
+  checkbox.addEventListener("dsoChange", () => setChangeFilter(!changeFilterOn));
+
+  return checkbox;
+}
+
+function createElement(tag, className, ...children) {
+  const element = document.createElement(tag);
+
+  if (className) {
+    element.className = className;
+  }
+
+  element.append(...children);
+
+  return element;
+}
+
+function createFilterRow() {
+  return createElement(
+    "div",
+    FILTER_ROW_CLASS,
+    createElement(
+      "div",
+      "dsov-document-structuur-filters",
+      createElement(
+        "div",
+        "dso-document-filter-block",
+        createElement(
+          "div",
+          "document-structuur-filter-container",
+          createElement("div"),
+          createElement(
+            "div",
+            "form-group dso-select",
+            createElement(
+              "div",
+              "dso-label-container",
+              createElement("label", "control-label sr-only", "Filter getoond document"),
+            ),
+            createElement("div", "dso-label-container", createElement("label", null, "Filter op:")),
+            createElement("div", "dso-field-container", createFilterCheckbox()),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function ensureChangeFilter(page) {
+  // Een ander document begint weer met alles zichtbaar.
+  if (page.documentId !== changeFilterDocumentId) {
+    changeFilterDocumentId = page.documentId;
+    applyChangeFilter(false);
+  }
+
+  const ownRow = document.querySelector(`.${FILTER_ROW_CLASS}`);
+  const viewerFields = document.querySelector(VIEWER_FILTER_FIELDS);
+
+  // De viewer tekent de onderdelen op het hoogste niveau altijd, en een onderdeel boven een wijziging heeft een badge.
+  // Een tabblad zonder zo'n onderdeel heeft dus niets om op te filteren, ook niet in een ingeklapt hoofdstuk.
+  const tabHasChanges = !!document.querySelector(CHANGED_COMPONENT);
+
+  // De viewer hergebruikt de balk met tabbladen bij een ander document of tabblad. Wat het script erin zette, blijft
+  // dan staan. De stand van het filter blijft wel bewaard, voor een tabblad van dit document met wijzigingen.
+  if (!showsChangeFilter(page) || !tabHasChanges) {
+    ownRow?.remove();
+    viewerFields?.querySelector(`:scope > .${FILTER_CHECKBOX_CLASS}`)?.remove();
+    document.body.classList.remove(FILTER_ACTIVE_CLASS);
+
+    return;
+  }
+
+  document.body.classList.toggle(FILTER_ACTIVE_CLASS, changeFilterOn);
+
+  if (!document.head.querySelector(`.${FILTER_STYLE_CLASS}`)) {
+    document.head.append(createStyle(FILTER_STYLE, FILTER_STYLE_CLASS));
+  }
+
+  // Met een locatie of een kenmerkenfilter toont de viewer zelf de rij "Filter op:". Dan komt het vinkje daarin.
+  if (viewerFields) {
+    ownRow?.remove();
+
+    if (!viewerFields.querySelector(`:scope > .${FILTER_CHECKBOX_CLASS}`)) {
+      viewerFields.append(createFilterCheckbox());
+    }
+
+    return;
+  }
+
+  const tabs = document.querySelector(`${STICKY_NAV} > dsov-document-tabs`);
+
+  if (!tabs) {
+    return;
+  }
+
+  if (!ownRow) {
+    tabs.after(createFilterRow());
+  } else if (tabs.nextElementSibling !== ownRow) {
+    tabs.after(ownRow);
+  }
+}
+
+function ensurePageControls() {
+  pageControlsScheduled = false;
+
   const page = currentPage();
 
   if (!page) {
@@ -1050,8 +1316,21 @@ function handleActivity(event) {
   }
 
   ensureDocumentButton(page);
+  ensureChangeFilter(page);
+}
 
-  if (!SUPPORTED_TABS.includes(page.tab)) {
+function schedulePageControls() {
+  // Bij het opbouwen van een document komen de meldingen in golven binnen. Eén controle per frame is genoeg.
+  if (!pageControlsScheduled) {
+    pageControlsScheduled = true;
+    requestAnimationFrame(ensurePageControls);
+  }
+}
+
+function handleActivity(event) {
+  const page = currentPage();
+
+  if (!page || !SUPPORTED_TABS.includes(page.tab)) {
     return;
   }
 
@@ -1069,10 +1348,15 @@ function start() {
     return;
   }
 
-  // Geen MutationObserver: er staan veel document componenten op een pagina. Alleen de keten onder de muis of focus
-  // krijgt een knop. De titel krijgt zijn knop bij het eerste event op een documentpagina.
+  // Er staan veel document componenten op een pagina. Alleen de keten onder de muis of focus krijgt een knop.
   document.addEventListener("pointerover", handleActivity, true);
   document.addEventListener("focusin", handleActivity, true);
+
+  // De knop naast de titel en het filter zijn er maar één keer per pagina, en moeten er staan zonder dat iemand de muis
+  // beweegt. De observer ziet de shadow roots van de document componenten niet, dus hover en de knoppen daarin tellen
+  // niet mee.
+  new MutationObserver(schedulePageControls).observe(document.body, { childList: true, subtree: true });
+  schedulePageControls();
 }
 
 if (typeof document !== "undefined") {

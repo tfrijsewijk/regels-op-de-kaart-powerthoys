@@ -20,6 +20,14 @@ https://resolver.omgevingswet.overheid.nl/viewer/document?expressionId=/akn/nl/a
 
 Bij een vastgestelde regeling legt het expressionId de getoonde versie vast, ook in tijdreis. Is die versie later vervallen, dan opent de resolver het document in tijdreis op die versie. Bij een ontwerp, een besluitversie of een IHR-plan bevat de permalink het technische id (`documentId`). De resolver opent het document zonder tabblad, dus de viewer kiest zelf het tabblad.
 
+## Filter op wijzigingen
+
+Bij een ontwerp of een besluitversie staat onder de tabbladen het vinkje "Wijzigingen", in de rij "Filter op:". Staat het vinkje aan, dan toont de viewer alleen de onderdelen die veranderen, en de onderdelen waaronder iets verandert. Dat zijn de onderdelen met het label "Gewijzigd" of "Ontwerp", of met de badge "!". Het filter werkt op elk niveau, ook bij leden, en op de tabbladen Regels, Toelichting, Inhoud en Bijlagen. Verandert er op een tabblad niets, zoals vaak bij de Toelichting van een wijzigingsbesluit, dan staat het vinkje er niet en zie je de hele inhoud.
+
+Open je het document via een locatie of een kenmerk, dan toont de viewer zelf de rij "Filter op:", met het vinkje Locatie of Kenmerken. Het vinkje Wijzigingen komt daar dan naast. Anders zet het script een eigen rij op dezelfde plek, met dezelfde opmaak.
+
+Zet je het filter aan of uit, dan blijft het onderdeel bovenaan in beeld op dezelfde plek staan. Zo kun je halverwege het document de onderdelen eromheen weer tonen. Een ander document begint met het filter uit, ook na herladen. Een ander tabblad van hetzelfde document houdt het filter, ook als je tussendoor een tabblad zonder wijzigingen opent.
+
 ## Verwerkte XML
 
 Naast de knop voor de link staat een knop met een plusteken in een vierkant. Die toont direct onder de kop de verwerkte XML van het document component: de XML die de viewer van Ozon krijgt en aan het component geeft. Onder elkaar staan Gereserveerd, Vervallen, Kop en Inhoud, voor zover het component ze heeft, met een lege regel ertussen. Het paneel staat boven de kenmerken en de inhoud van het component en springt net zo ver in als de kenmerken.
@@ -69,10 +77,13 @@ Tot en met versie 1.2.0 heette het script "Regels op de kaart: deeplink naar doc
 - Klap je een bovenliggend onderdeel in, dan haalt de viewer de onderdelen eronder weg, met hun open XML-panelen.
 - De viewer scrolt het document component net onder zijn vaste tabbalk. Je ziet de kop dan soms niet meteen.
 - Plak je de link in een tabblad dat al hetzelfde document en tabblad toont, dan verandert alleen het fragment. Het portaal geeft dat niet door aan de viewer en er gebeurt niets. Herlaad dan de pagina, of open de link in een nieuw tabblad.
+- Het filter leunt op de labels en badges die de viewer zet. Een onderdeel heet ook "Gewijzigd" als alleen een annotatie verandert, zoals een werkingsgebied. Met het filter aan staat zo'n onderdeel er dus, zonder zichtbare wijziging in de tekst.
+- Het filter verbergt onderdelen, geen tekst. Begrippen in een begrippenlijst zijn tekst van één onderdeel, en blijven dus allemaal staan.
+- De eigen rij "Filter op:" neemt de opmaak van de viewer over. Verandert de viewer die opmaak, dan wijkt de eigen rij af tot het script volgt.
 
 ## Testen
 
-De functies die de link bouwen en de XML opmaken en kleuren, werken zonder DOM en hebben tests. Draai ze met Node 20 of nieuwer:
+De functies die de link bouwen, de XML opmaken en kleuren, en bepalen of het filter op wijzigingen verschijnt, werken zonder DOM en hebben tests. Draai ze met Node 20 of nieuwer:
 
 ```
 node --test
