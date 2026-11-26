@@ -44,7 +44,9 @@ In Chrome moet je bij zo'n extensie mogelijk "Gebruikersscripts toestaan" aanzet
 
 De extensie kijkt zelf af en toe of er een nieuwe versie op `main` staat. Wil je niet wachten, zoek dan in het menu van de extensie naar updates.
 
-Een nieuwe versie uitbrengen gaat zo: verhoog `@version` in de kop van het script en push naar `main`. Zonder hogere versie ziet de extensie geen update. GitHub houdt het ruwe bestand een paar minuten in de cache.
+Wat er per versie veranderde, staat in [CHANGELOG.md](CHANGELOG.md). De extensie toont dat zelf niet.
+
+Een nieuwe versie uitbrengen gaat zo: verhoog `@version` in de kop van het script, beschrijf de versie in de changelog en push naar `main`. Zonder hogere versie ziet de extensie geen update. GitHub houdt het ruwe bestand een paar minuten in de cache.
 
 Tot en met versie 1.2.0 heette het script "Regels op de kaart: deeplink naar document component in document", in de repo `regels-op-de-kaart-deeplink`. Een installatie van toen zoekt updates op het oude adres. Daarom staat `regels-op-de-kaart-deeplink.user.js` er nog, als kopie van versie 1.3.0. Via die kopie schuift zo'n installatie door naar het nieuwe adres. De kopie krijgt geen nieuwe versies en verdwijnt later.
 
